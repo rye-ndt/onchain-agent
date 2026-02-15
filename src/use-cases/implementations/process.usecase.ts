@@ -8,24 +8,29 @@ import {
   IStoreResponse,
   StandardizedData,
 } from "../interface/output/process.interface";
-import { IVectorService } from "../interface/output/IVectorize";
 
 import { IError } from "../interface/input/error.interface";
 import { IChunker } from "../interface/input/chunker.interface";
 import { ICategorizer } from "../interface/input/categorizer.interface";
-import { IVectorizer } from "../interface/input/vectorizer.interface";
+import {
+  IVectorDB,
+  IVectorizer,
+} from "../interface/input/vectorizer.interface";
 
 //defines what user can do to interact with the system
 export class ProcessUserRequest implements IProcessUserRequest {
   private vectorizer: IVectorizer;
   private categorizer: ICategorizer;
   private chunker: IChunker;
+  private vectorDB: IVectorDB;
+  private sqlDB: IPostgresDB;
 
   //user can store, retrieve and request for aggregation / compilation
   constructor(
-    vectorizer: IVectorService,
+    vectorizer: IVectorizer,
     categorizer: ICategorizer,
     chunker: IChunker,
+    vectorDB: IVectorDB,
   ) {
     this.vectorizer = vectorizer;
     this.categorizer = categorizer;
@@ -37,18 +42,9 @@ export class ProcessUserRequest implements IProcessUserRequest {
       //vectorize
       const chunks = await this.chunker.process(data.rawData);
 
-      //consider get all categories of user for the model to predict the category
+      const categorizedChunks = await this.categorizer.batchProcess(chunks);
 
-      const vectors = await Promise.all(
-        chunks.map(async (chunk) => {
-          const vector = await this.vectorizer.process(chunk);
-          return vector;
-        }),
-      );
-
-      const flattenedVectors = vectors.flat();
-
-      const category = await this.categorizer.process(data.rawData);
+      const chunkVectors = await this.vectorizer.batchProcess(chunks);
 
       //store the data
       const storeData: StandardizedData = {

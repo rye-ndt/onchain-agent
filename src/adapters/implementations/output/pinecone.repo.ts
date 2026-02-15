@@ -1,85 +1,54 @@
-import { Pinecone } from "@pinecone-database/pinecone";
-import { PRIMARY_CATEGORY } from "../../../helpers/enums/categories.enum";
-import { StandardizedData } from "../../../use-cases/interface/output/process.interface";
+import { Pinecone as PineconeClient } from "@pinecone-database/pinecone";
 import {
-  IVector,
   IVectorDB,
-} from "../../../use-cases/interface/output/IVectorize";
+  IVectorWithMetadata,
+} from "../../../use-cases/interface/input/vectorizer.interface";
 
 type PineconeMetadata = {
   id: string;
-  rawData: string;
-  category: PRIMARY_CATEGORY;
-  payload?: any;
-  createdAtTimestamp: number;
-  updatedAtTimestamp: number;
+  chunkId: string;
+  userId: string;
+  primaryCategory: string;
+  tags: string[];
 };
 
-const pinecone = new Pinecone();
-const pineconeIndexHost = process.env.PINECONE_INDEX_HOST;
+type Config = {
+  indexHost: string;
+};
 
-if (!pineconeIndexHost) {
-  throw new Error("PINECONE_INDEX_HOST environment variable is not set.");
-}
+type PineconeIndex = ReturnType<PineconeClient["index"]>;
 
-const index = pinecone.index<PineconeMetadata>({ host: pineconeIndexHost });
+export class PineconeRepo implements IVectorDB {
+  private readonly index: PineconeIndex;
 
-export class PineconeRepoConcrete implements IVectorDB {
-  async store(data: StandardizedData): Promise<void> {
-    if (!data.vector || data.vector.length === 0) {
+  constructor(config: Config) {
+    const pinecone = new PineconeClient();
+
+    const host = config.indexHost;
+    if (!host) {
+      throw new Error("PINECONE_INDEX_HOST or config.indexHost is required.");
+    }
+
+    this.index = pinecone.index<PineconeMetadata>({ host });
+  }
+
+  async store(chunkVectors: IVectorWithMetadata[]): Promise<void> {
+    if (!chunkVectors?.length) {
       return;
     }
 
-    const records = data.vector.map((v: IVector) => ({
-      id: `${data.id}:${v.id}`,
+    const records = chunkVectors.map((v) => ({
+      id: `${v.metadata.userId}:${v.id}:${v.chunkId}`,
       values: v.vector,
       metadata: {
-        id: data.id,
-        rawData: data.rawData,
-        category: data.category,
-        payload: data.payload,
-        createdAtTimestamp: data.createdAtTimestamp,
-        updatedAtTimestamp: data.updatedAtTimestamp,
+        id: v.id,
+        chunkId: v.chunkId,
+        userId: v.metadata.userId,
+        primaryCategory: v.metadata.primaryCategory,
+        tags: v.metadata.tags,
       },
     }));
 
-    await index.upsert({ records });
-  }
-
-  async retrieve(
-    category: PRIMARY_CATEGORY,
-    queryVectors: IVector[],
-  ): Promise<StandardizedData[]> {
-    if (!queryVectors || queryVectors.length === 0) {
-      return [];
-    }
-
-    const queryVector = queryVectors[0].vector;
-
-    const queryResponse = await index.query({
-      vector: queryVector,
-      topK: 10,
-      includeMetadata: true,
-      filter: {
-        category,
-      },
-    });
-
-    const matches = queryResponse.matches ?? [];
-
-    const results: StandardizedData[] = matches
-      .map((match) => match.metadata)
-      .filter((metadata): metadata is PineconeMetadata => !!metadata)
-      .map((metadata) => ({
-        id: metadata.id,
-        rawData: metadata.rawData,
-        vector: [],
-        category: metadata.category,
-        payload: metadata.payload,
-        createdAtTimestamp: metadata.createdAtTimestamp,
-        updatedAtTimestamp: metadata.updatedAtTimestamp,
-      }));
-
-    return results;
+    await this.index.upsert({ records });
   }
 }

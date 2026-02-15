@@ -33,6 +33,8 @@
 ## 2026-02-15
 
 - Categorizer: `V1Categorizer` in `src/adapters/implementations/input/categorizer/v1.categorizer.ts` uses OpenAI SDK `chat.completions.parse()` with `zodResponseFormat` for structured output. Config: `{ model, apiKey }`. Returns `CategorizedItem` (category from `PRIMARY_CATEGORY`, tags string[]). Requires GPT-4o or later for structured outputs. Dependencies: `openai`, `zod`.
+- PostgresDB: Base Postgres adapter in `src/adapters/implementations/input/sqlDB/postgres.db.ts`. Drizzle ORM + `pg` driver. Config: `connectionString` or `{ host, port?, user, password, database }`. Subclasses use `protected get db` (NodePgDatabase) for queries. `close()` ends the pool. Schema: `sqlDB/schema.ts`; migrations: `drizzle.config.ts`, scripts `db:generate`, `db:migrate`, `db:push`, `db:studio`. Env: `DATABASE_URL`.
+- SQL ports (table repos): `src/use-cases/interface/input/sqlDB.interface.ts` defines per-table repository ports (example: `IOriginalNoteDB`) and an `ISqlDB` facade. Drizzle adapter facade `src/adapters/implementations/input/sqlDB/drizzleSqlDb.adapter.ts` owns one DB connection and exposes repositories (example: `repositories/originalNote.repo.ts`). Example consumption: `src/use-cases/implementations/storeOriginalNote.usecase.ts`.
 
 ## Next Steps
 
