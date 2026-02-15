@@ -3,7 +3,7 @@ import {
   IProcessUserRequest,
   IRawData,
   IQueryData,
-} from "../../../../use-cases/interface/input/IStoreData";
+} from "../../../../use-cases/interface/output/process.interface";
 import { readJsonBody } from "./helper";
 
 export class ProcessControllerConcrete {
@@ -11,7 +11,7 @@ export class ProcessControllerConcrete {
 
   async handleProcess(
     req: IncomingMessage,
-    res: ServerResponse
+    res: ServerResponse,
   ): Promise<void> {
     try {
       const body = await readJsonBody<IRawData>(req);

@@ -1,6 +1,6 @@
 import { Pinecone } from "@pinecone-database/pinecone";
-import { SUPPORTED_CATEGORIES } from "../../../helpers/enums/supportedFunctions.enum";
-import { StandardizedData } from "../../../use-cases/interface/input/IStoreData";
+import { PRIMARY_CATEGORY } from "../../../helpers/enums/categories.enum";
+import { StandardizedData } from "../../../use-cases/interface/output/process.interface";
 import {
   IVector,
   IVectorDB,
@@ -9,7 +9,7 @@ import {
 type PineconeMetadata = {
   id: string;
   rawData: string;
-  category: SUPPORTED_CATEGORIES;
+  category: PRIMARY_CATEGORY;
   payload?: any;
   createdAtTimestamp: number;
   updatedAtTimestamp: number;
@@ -47,7 +47,7 @@ export class PineconeRepoConcrete implements IVectorDB {
   }
 
   async retrieve(
-    category: SUPPORTED_CATEGORIES,
+    category: PRIMARY_CATEGORY,
     queryVectors: IVector[],
   ): Promise<StandardizedData[]> {
     if (!queryVectors || queryVectors.length === 0) {

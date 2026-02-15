@@ -1,0 +1,16 @@
+export enum PRIMARY_CATEGORY {
+  BACKEND = "backend",
+  FRONTEND = "frontend",
+  DEVOPS = "devops",
+  DATABASE = "database",
+  ARCHITECTURE = "architecture",
+  AI_ML = "ai_ml",
+  BLOCKCHAIN = "blockchain",
+  SECURITY = "security",
+  TESTING = "testing",
+  SYSTEM_DESIGN = "system_design",
+  PRODUCT = "product",
+  CAREER = "career",
+  RESEARCH = "research",
+  OTHER = "other",
+}

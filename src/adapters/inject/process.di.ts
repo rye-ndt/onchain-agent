@@ -1,6 +1,6 @@
 import { IVectorDB } from "../../use-cases/interface/output/IVectorize";
 import { ProcessControllerConcrete } from "../implementations/input/http/process.controller";
-import { IProcessUserRequest } from "../../use-cases/interface/input/IStoreData";
+import { IProcessUserRequest } from "../../use-cases/interface/output/process.interface";
 import { ProcessUserRequest } from "../../use-cases/implementations/process.usecase";
 
 export class ProcessInject {

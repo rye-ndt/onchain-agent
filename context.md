@@ -4,7 +4,7 @@
 
 - Initialized analysis of the Hexagonal Architecture project.
 - User is implementing a "Store Data" feature with `Agent` capabilities.
-- Added `SUPPORTED_FUNCTIONS` and `SUPPORTED_CATEGORIES` enums.
+- Added `SUPPORTED_FUNCTIONS` enum. Primary categories live in `src/helpers/enums/categories.enum.ts` as `PRIMARY_CATEGORY`.
 - Modified `Agent` entity to include supported methods.
 - Installed `uuid` and `@types/uuid` packages.
 - Fixed `IStoreData.ts` interface definition.
@@ -29,6 +29,10 @@
 
 - `IStoreData.ts` was in a broken state, assumed `id` is string and `store` returns Promise.
 - `payload` made optional in `IStoreData.ts` to resolve build error in `StoreUserInput.ts`.
+
+## 2026-02-15
+
+- Categorizer: `V1Categorizer` in `src/adapters/implementations/input/categorizer/v1.categorizer.ts` uses OpenAI SDK `chat.completions.parse()` with `zodResponseFormat` for structured output. Config: `{ model, apiKey }`. Returns `CategorizedItem` (category from `PRIMARY_CATEGORY`, tags string[]). Requires GPT-4o or later for structured outputs. Dependencies: `openai`, `zod`.
 
 ## Next Steps
 

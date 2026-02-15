@@ -7,32 +7,28 @@ import {
   IRawData,
   IStoreResponse,
   StandardizedData,
-} from "../interface/input/IStoreData";
-import {
-  ICategorizeService,
-  IChunker,
-  IVectorDB,
-  IVectorService,
-} from "../interface/output/IVectorize";
-import { IError } from "../interface/input/IError";
+} from "../interface/output/process.interface";
+import { IVectorService } from "../interface/output/IVectorize";
+
+import { IError } from "../interface/input/error.interface";
+import { IChunker } from "../interface/input/chunker.interface";
+import { ICategorizer } from "../interface/input/categorizer.interface";
+import { IVectorizer } from "../interface/input/vectorizer.interface";
 
 //defines what user can do to interact with the system
 export class ProcessUserRequest implements IProcessUserRequest {
-  private vectorizer: IVectorService;
-  private categorizer: ICategorizeService;
-  private vectorDB: IVectorDB;
+  private vectorizer: IVectorizer;
+  private categorizer: ICategorizer;
   private chunker: IChunker;
 
   //user can store, retrieve and request for aggregation / compilation
   constructor(
     vectorizer: IVectorService,
-    categorizer: ICategorizeService,
+    categorizer: ICategorizer,
     chunker: IChunker,
-    vectorDB: IVectorDB,
   ) {
     this.vectorizer = vectorizer;
     this.categorizer = categorizer;
-    this.vectorDB = vectorDB;
     this.chunker = chunker;
   }
 
@@ -40,6 +36,8 @@ export class ProcessUserRequest implements IProcessUserRequest {
     try {
       //vectorize
       const chunks = await this.chunker.process(data.rawData);
+
+      //consider get all categories of user for the model to predict the category
 
       const vectors = await Promise.all(
         chunks.map(async (chunk) => {

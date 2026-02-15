@@ -1,12 +1,12 @@
-import { SUPPORTED_CATEGORIES } from "../../../helpers/enums/supportedFunctions.enum";
-import { IVector } from "../output/IVectorize";
+import { PRIMARY_CATEGORY } from "../../../helpers/enums/categories.enum";
+import { IVector } from "./IVectorize";
 
 // What outer service expects this service to do
 export interface StandardizedData {
   id: string;
   rawData: string;
   vector: IVector[];
-  category: SUPPORTED_CATEGORIES;
+  category: PRIMARY_CATEGORY;
   payload?: any;
   createdAtTimestamp: number;
   updatedAtTimestamp: number;
