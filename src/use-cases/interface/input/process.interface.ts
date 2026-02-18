@@ -1,5 +1,7 @@
 import { PRIMARY_CATEGORY } from "../../../helpers/enums/categories.enum";
+import { MATERIAL_STATUSES } from "../../../helpers/enums/statuses.enum";
 import { IVectorWithMetadata } from "../output/vectorDB.interface";
+import { IPaginated } from "../shared/pagination";
 
 // What outer service expects this service to do
 export interface StandardizedData {
@@ -24,7 +26,11 @@ export interface IStoreResponse {
 }
 
 export interface IQueryData {
-  rawQuery: string;
+  page: number;
+  limit: number;
+  status: MATERIAL_STATUSES[];
+  categories: PRIMARY_CATEGORY[];
+  userId: string;
 }
 
 export interface IQueryResponse {
@@ -32,7 +38,15 @@ export interface IQueryResponse {
   referenceVectorIDs: string[];
 }
 
+export interface IUserCategory {
+  category: PRIMARY_CATEGORY;
+  tags: string[];
+  materialCount: number;
+  totalWords: number;
+  lastUpdatedAtEpoch: number;
+}
+
 export interface IProcessNoteUseCase {
   processAndStore(data: IRawData): Promise<IStoreResponse>;
-  query(query: IQueryData): Promise<IQueryResponse>;
+  queryCategories(query: IQueryData): Promise<IPaginated<IUserCategory>>;
 }

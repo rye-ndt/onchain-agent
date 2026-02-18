@@ -1,10 +1,12 @@
 import { newUuid } from "../../helpers/uuid";
+import Redis from "ioredis";
 import {
   IProcessNoteUseCase,
   IQueryData,
   IQueryResponse,
   IRawData,
   IStoreResponse,
+  IUserCategory,
 } from "../interface/input/process.interface";
 
 import { IError } from "../interface/shared/error";
@@ -23,6 +25,7 @@ import {
 } from "../interface/output/vectorizer.interface";
 import { ISqlDB, ITransaction } from "../interface/output/sqlDB.interface";
 import {
+  IListMaterialFilters,
   IMaterialDB,
   IMaterialVector,
   IMaterialVectorDB,
@@ -35,6 +38,31 @@ import {
 import { newCurrentUTCEpoch } from "../../helpers/time/dateTime";
 import { MATERIAL_STATUSES } from "../../helpers/enums/statuses.enum";
 import { PRIMARY_CATEGORY } from "../../helpers/enums/categories.enum";
+import { IPaginated } from "../interface/shared/pagination";
+import {
+  CACHE_KEY_PREFIX,
+  CACHE_TTL_SECONDS,
+} from "../../helpers/enums/cache.enum";
+
+const queryCategoriesRedis = new Redis(
+  process.env.REDIS_URL ?? "redis://localhost:6379",
+);
+
+const queryCategoriesCacheKey = (query: IQueryData): string => {
+  const statusPart = query.status.join(",");
+  const categoriesPart = query.categories.join(",");
+
+  return `${CACHE_KEY_PREFIX.QUERY_CATEGORIES}${query.userId}:${statusPart}:${categoriesPart}:${query.page}:${query.limit}`;
+};
+
+const queryCategoriesCacheTtlSeconds = (): number => {
+  const fromEnv = Number(process.env.QUERY_CATEGORIES_CACHE_TTL_SECONDS);
+  if (!Number.isNaN(fromEnv) && fromEnv > 0) {
+    return fromEnv;
+  }
+
+  return CACHE_TTL_SECONDS.QUERY_CATEGORIES_DEFAULT;
+};
 
 interface PipelineResult {
   chunks: TextChunk[];
@@ -103,6 +131,7 @@ export class ProcessUserRequest implements IProcessNoteUseCase {
       categorizedChunks.map((c) => [c.chunkId, c]),
     );
     const chunkVectors = await this.vectorizer.batchProcess(chunks);
+
     return { chunks, categorizedByChunkId, chunkVectors };
   }
 
@@ -186,10 +215,73 @@ export class ProcessUserRequest implements IProcessNoteUseCase {
     });
   }
 
-  async query(query: IQueryData): Promise<IQueryResponse> {
-    void query;
-    throw new IError(
-      "Query is not implemented: no vector DB retrieve port is wired yet.",
+  async queryCategories(query: IQueryData): Promise<IPaginated<IUserCategory>> {
+    const cacheKey = queryCategoriesCacheKey(query);
+    const cached = await queryCategoriesRedis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached) as IPaginated<IUserCategory>;
+    }
+
+    const queryParams: IListMaterialFilters = {
+      userId: query.userId,
+      status: query.status,
+      categories: query.categories,
+      page: query.page,
+      limit: query.limit,
+    };
+
+    const materials = await this.materialRepo.list(queryParams);
+
+    const categoryMap = new Map<PRIMARY_CATEGORY, IUserCategory>();
+
+    for (const m of materials.items) {
+      const existing = categoryMap.get(m.category);
+
+      const wordCount = m.rewrittenContent.trim()
+        ? m.rewrittenContent.trim().split(/\s+/).length
+        : 0;
+
+      if (!existing) {
+        const tags = Array.from(new Set(m.tags));
+
+        categoryMap.set(m.category, {
+          category: m.category,
+          tags,
+          materialCount: 1,
+          totalWords: wordCount,
+          lastUpdatedAtEpoch: m.updatedAtEpoch,
+        });
+
+        continue;
+      }
+
+      existing.materialCount += 1;
+      existing.totalWords += wordCount;
+      existing.lastUpdatedAtEpoch = Math.max(
+        existing.lastUpdatedAtEpoch,
+        m.updatedAtEpoch,
+      );
+
+      const mergedTags = new Set<string>([...existing.tags, ...m.tags]);
+      existing.tags = Array.from(mergedTags);
+    }
+
+    const items = Array.from(categoryMap.values());
+
+    const result: IPaginated<IUserCategory> = {
+      items,
+      total: items.length,
+      page: query.page,
+      limit: query.limit,
+      hasMore: materials.total > query.page * query.limit,
+    };
+
+    await queryCategoriesRedis.setex(
+      cacheKey,
+      queryCategoriesCacheTtlSeconds(),
+      JSON.stringify(result),
     );
+
+    return result;
   }
 }

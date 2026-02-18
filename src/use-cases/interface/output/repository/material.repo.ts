@@ -14,6 +14,19 @@ export interface Material {
   updatedAtEpoch: number;
 }
 
+export interface IListMaterialFilters {
+  userId: string;
+  status: MATERIAL_STATUSES[];
+  categories: PRIMARY_CATEGORY[];
+  page: number;
+  limit: number;
+}
+
+export interface IListQuery<T> {
+  items: T[];
+  total: number;
+}
+
 export interface IMaterialDB {
   create(material: Material): Promise<void>;
   batchCreate(materials: Material[]): Promise<void>;
@@ -26,6 +39,7 @@ export interface IMaterialDB {
     userId: string,
     status: MATERIAL_STATUSES[],
   ): Promise<Material[]>;
+  list(query: IListMaterialFilters): Promise<IListQuery<Material>>;
 }
 
 export interface IMaterialVector {

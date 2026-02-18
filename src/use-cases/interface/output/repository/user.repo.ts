@@ -45,7 +45,4 @@ export interface IUserDB {
   update(user: UserUpdate): Promise<void>;
   findById(id: string): Promise<IUser | undefined>;
   findByUsernameOrEmail(username: string, email: string): Promise<IUser | null>;
-  login(data: ILoginUser): Promise<UseCaseUser>;
-  logout(accessToken: string): Promise<void>;
-  refresh(refreshToken: string): Promise<UseCaseUser>;
 }
