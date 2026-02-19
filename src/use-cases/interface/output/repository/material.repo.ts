@@ -32,6 +32,7 @@ export interface IMaterialDB {
   batchCreate(materials: Material[]): Promise<void>;
   findByIds(ids: string[], status: MATERIAL_STATUSES[]): Promise<Material[]>;
   findByCategory(
+    userId: string,
     category: PRIMARY_CATEGORY,
     status: MATERIAL_STATUSES[],
   ): Promise<Material[]>;

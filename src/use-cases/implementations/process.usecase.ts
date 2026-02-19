@@ -1,10 +1,15 @@
 import { newUuid } from "../../helpers/uuid";
 import Redis from "ioredis";
 import {
+  IBuildContent,
+  IBuildContentResponse,
+  IGenerateAndPersistContentParams,
   IProcessNoteUseCase,
   IQueryData,
   IQueryResponse,
   IRawData,
+  IRegenerateContent,
+  IRetrieveContents,
   IStoreResponse,
   IUserCategory,
 } from "../interface/input/process.interface";
@@ -43,6 +48,17 @@ import {
   CACHE_KEY_PREFIX,
   CACHE_TTL_SECONDS,
 } from "../../helpers/enums/cache.enum";
+import {
+  GeneratedContentDB,
+  IGeneratedContentDB,
+} from "../interface/output/repository/generatedContent.repo";
+import { DISPLAY_FORMAT } from "../../helpers/enums/format.enum";
+import {
+  GeneratedContent,
+  IGenerator,
+} from "../interface/output/generator.interface";
+import { CONTENT_PERSIST } from "../../helpers/enums/contentPersist.enum";
+import { ERROR_CODES } from "../../helpers/enums/errorCodes.enum";
 
 const queryCategoriesRedis = new Redis(
   process.env.REDIS_URL ?? "redis://localhost:6379",
@@ -91,7 +107,182 @@ export class ProcessUserRequest implements IProcessNoteUseCase {
     private readonly materialRepo: IMaterialDB,
     private readonly materialVectorRepo: IMaterialVectorDB,
     private readonly originalNoteRepo: IOriginalNoteDB,
+    private readonly contentRepo: IGeneratedContentDB,
+    private readonly generator: IGenerator,
   ) {}
+
+  async retrieveContents(
+    query: IRetrieveContents,
+  ): Promise<IBuildContentResponse[]> {
+    //find the content in the db
+    const contents = await this.contentRepo.retrieve(
+      query.userId,
+      query.category,
+    );
+
+    const resp: IBuildContentResponse[] = contents.map((c) => ({
+      id: c.id,
+      rawData: c.content,
+      displayFormat: c.displayFormat,
+      usedMaterialIds: c.materialIDs,
+      usedTags: c.tags,
+      createdAtEpoch: c.createdAtEpoch,
+      updatedAtEpoch: c.updatedAtEpoch,
+    }));
+
+    return resp;
+  }
+
+  private async generateAndPersistContent(
+    params: IGenerateAndPersistContentParams,
+  ): Promise<IBuildContentResponse> {
+    const { userId, category, extraRequirements, persist } = params;
+    const now = newCurrentUTCEpoch();
+    const createdAtEpoch = params.createdAtEpoch ?? now;
+
+    const materials = await this.materialRepo.findByCategory(userId, category, [
+      MATERIAL_STATUSES.ACTIVE,
+    ]);
+
+    const content = await this.generator.generate({
+      allMaterials: materials,
+      extraRequirements,
+      ...(params.existingContent && {
+        existingContent: params.existingContent,
+      }),
+    });
+
+    const contentEntity: GeneratedContentDB = {
+      id: newUuid(),
+      userId,
+      category,
+      tags: content.usedTags,
+      content: content.rawContent,
+      displayFormat: content.displayFormat,
+      materialIDs: content.usedMaterialIds,
+      createdAtEpoch,
+      updatedAtEpoch: now,
+    };
+
+    if (persist === CONTENT_PERSIST.CREATE) {
+      await this.contentRepo.create(contentEntity);
+    } else {
+      await this.contentRepo.update(contentEntity);
+    }
+
+    return {
+      id: contentEntity.id,
+      rawData: content.rawContent,
+      displayFormat: content.displayFormat,
+      usedMaterialIds: content.usedMaterialIds,
+      usedTags: content.usedTags,
+      createdAtEpoch: contentEntity.createdAtEpoch,
+      updatedAtEpoch: contentEntity.updatedAtEpoch,
+    };
+  }
+
+  async buildContentBaseOnExistingContents(
+    query: IRegenerateContent,
+  ): Promise<IBuildContentResponse> {
+    const existingContent = await this.contentRepo.getById(
+      query.existingContentId,
+    );
+
+    if (!existingContent) {
+      throw new IError(ERROR_CODES.CONTENT_NOT_FOUND);
+    }
+
+    return this.generateAndPersistContent({
+      userId: query.userId,
+      category: query.category,
+      extraRequirements: query.extraRequirements,
+      existingContent: existingContent.content,
+      createdAtEpoch: existingContent.createdAtEpoch,
+      persist: CONTENT_PERSIST.UPDATE,
+    });
+  }
+
+  async buildContent(query: IBuildContent): Promise<IBuildContentResponse> {
+    return this.generateAndPersistContent({
+      userId: query.userId,
+      category: query.category,
+      extraRequirements: query.extraRequirements,
+      persist: CONTENT_PERSIST.CREATE,
+    });
+  }
+
+  //how do you know what content to generate?
+  // -> api to suggest user contents they should care about
+
+  async queryCategories(query: IQueryData): Promise<IPaginated<IUserCategory>> {
+    const cacheKey = queryCategoriesCacheKey(query);
+    const cached = await queryCategoriesRedis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached) as IPaginated<IUserCategory>;
+    }
+
+    const queryParams: IListMaterialFilters = {
+      userId: query.userId,
+      status: query.status,
+      categories: query.categories,
+      page: query.page,
+      limit: query.limit,
+    };
+
+    const materials = await this.materialRepo.list(queryParams);
+
+    const categoryMap = new Map<PRIMARY_CATEGORY, IUserCategory>();
+
+    for (const m of materials.items) {
+      const existing = categoryMap.get(m.category);
+
+      const wordCount = m.rewrittenContent.trim()
+        ? m.rewrittenContent.trim().split(/\s+/).length
+        : 0;
+
+      if (!existing) {
+        const tags = Array.from(new Set(m.tags));
+
+        categoryMap.set(m.category, {
+          category: m.category,
+          tags,
+          materialCount: 1,
+          totalWords: wordCount,
+          lastUpdatedAtEpoch: m.updatedAtEpoch,
+        });
+
+        continue;
+      }
+
+      existing.materialCount += 1;
+      existing.totalWords += wordCount;
+      existing.lastUpdatedAtEpoch = Math.max(
+        existing.lastUpdatedAtEpoch,
+        m.updatedAtEpoch,
+      );
+
+      const mergedTags = new Set<string>([...existing.tags, ...m.tags]);
+      existing.tags = Array.from(mergedTags);
+    }
+
+    const items = Array.from(categoryMap.values());
+
+    const result: IPaginated<IUserCategory> = {
+      items,
+      total: items.length,
+      page: query.page,
+      limit: query.limit,
+      hasMore: materials.total > query.page * query.limit,
+    };
+
+    await queryCategoriesRedis.setex(
+      cacheKey,
+      queryCategoriesCacheTtlSeconds(),
+      JSON.stringify(result),
+    );
+
+    return result;
+  }
 
   async processAndStore(data: IRawData): Promise<IStoreResponse> {
     try {
@@ -213,75 +404,5 @@ export class ProcessUserRequest implements IProcessNoteUseCase {
       await this.originalNoteRepo.create(userData.originalNote);
       await this.vectorDB.store(userData.vectors);
     });
-  }
-
-  async queryCategories(query: IQueryData): Promise<IPaginated<IUserCategory>> {
-    const cacheKey = queryCategoriesCacheKey(query);
-    const cached = await queryCategoriesRedis.get(cacheKey);
-    if (cached) {
-      return JSON.parse(cached) as IPaginated<IUserCategory>;
-    }
-
-    const queryParams: IListMaterialFilters = {
-      userId: query.userId,
-      status: query.status,
-      categories: query.categories,
-      page: query.page,
-      limit: query.limit,
-    };
-
-    const materials = await this.materialRepo.list(queryParams);
-
-    const categoryMap = new Map<PRIMARY_CATEGORY, IUserCategory>();
-
-    for (const m of materials.items) {
-      const existing = categoryMap.get(m.category);
-
-      const wordCount = m.rewrittenContent.trim()
-        ? m.rewrittenContent.trim().split(/\s+/).length
-        : 0;
-
-      if (!existing) {
-        const tags = Array.from(new Set(m.tags));
-
-        categoryMap.set(m.category, {
-          category: m.category,
-          tags,
-          materialCount: 1,
-          totalWords: wordCount,
-          lastUpdatedAtEpoch: m.updatedAtEpoch,
-        });
-
-        continue;
-      }
-
-      existing.materialCount += 1;
-      existing.totalWords += wordCount;
-      existing.lastUpdatedAtEpoch = Math.max(
-        existing.lastUpdatedAtEpoch,
-        m.updatedAtEpoch,
-      );
-
-      const mergedTags = new Set<string>([...existing.tags, ...m.tags]);
-      existing.tags = Array.from(mergedTags);
-    }
-
-    const items = Array.from(categoryMap.values());
-
-    const result: IPaginated<IUserCategory> = {
-      items,
-      total: items.length,
-      page: query.page,
-      limit: query.limit,
-      hasMore: materials.total > query.page * query.limit,
-    };
-
-    await queryCategoriesRedis.setex(
-      cacheKey,
-      queryCategoriesCacheTtlSeconds(),
-      JSON.stringify(result),
-    );
-
-    return result;
   }
 }

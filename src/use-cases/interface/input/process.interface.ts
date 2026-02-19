@@ -1,4 +1,6 @@
 import { PRIMARY_CATEGORY } from "../../../helpers/enums/categories.enum";
+import { CONTENT_PERSIST } from "../../../helpers/enums/contentPersist.enum";
+import { DISPLAY_FORMAT } from "../../../helpers/enums/format.enum";
 import { MATERIAL_STATUSES } from "../../../helpers/enums/statuses.enum";
 import { IVectorWithMetadata } from "../output/vectorDB.interface";
 import { IPaginated } from "../shared/pagination";
@@ -33,6 +35,30 @@ export interface IQueryData {
   userId: string;
 }
 
+export interface IRetrieveContents {
+  userId: string;
+  category: PRIMARY_CATEGORY;
+}
+
+export interface IBuildContent {
+  userId: string;
+  category: PRIMARY_CATEGORY;
+  extraRequirements: string;
+}
+
+export interface IRegenerateContent extends IBuildContent {
+  existingContentId: string;
+}
+
+export interface IGenerateAndPersistContentParams {
+  userId: string;
+  category: PRIMARY_CATEGORY;
+  extraRequirements: string;
+  existingContent?: string;
+  createdAtEpoch?: number;
+  persist: CONTENT_PERSIST;
+}
+
 export interface IQueryResponse {
   rawData: string[];
   referenceVectorIDs: string[];
@@ -46,7 +72,19 @@ export interface IUserCategory {
   lastUpdatedAtEpoch: number;
 }
 
+export interface IBuildContentResponse {
+  id: string;
+  rawData: string;
+  displayFormat: DISPLAY_FORMAT;
+  usedMaterialIds: string[];
+  usedTags: string[];
+  createdAtEpoch: number;
+  updatedAtEpoch: number;
+}
+
 export interface IProcessNoteUseCase {
+  retrieveContents(query: IRetrieveContents): Promise<IBuildContentResponse[]>;
+  buildContent(query: IBuildContent): Promise<IBuildContentResponse>;
   processAndStore(data: IRawData): Promise<IStoreResponse>;
   queryCategories(query: IQueryData): Promise<IPaginated<IUserCategory>>;
 }

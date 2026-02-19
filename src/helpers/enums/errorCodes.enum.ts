@@ -1,5 +1,11 @@
-export enum ERROR_CODES {
+// Content group
+export enum CONTENT_ERROR_CODES {
+  CONTENT_NOT_FOUND = "CONTENT_NOT_FOUND",
   UNKNOWN_ERROR = "UNKNOWN_ERROR",
+}
+
+// User group
+export enum USER_ERROR_CODES {
   USER_ALREADY_EXISTS = "USER_ALREADY_EXISTS",
   WEAK_PASSWORD = "WEAK_PASSWORD",
   INVALID_EMAIL = "INVALID_EMAIL",
@@ -9,14 +15,22 @@ export enum ERROR_CODES {
   INVALID_VERIFICATION_CODE = "INVALID_VERIFICATION_CODE",
 }
 
-export const ERROR_CODES_MAP = {
-  [ERROR_CODES.UNKNOWN_ERROR]: "An unknown error occurred.",
-  [ERROR_CODES.USER_ALREADY_EXISTS]:
+export const ERROR_CODES = {
+  ...CONTENT_ERROR_CODES,
+  ...USER_ERROR_CODES,
+} as const;
+
+export type ERROR_CODES = CONTENT_ERROR_CODES | USER_ERROR_CODES;
+
+export const ERROR_CODES_MAP: Record<ERROR_CODES, string> = {
+  [CONTENT_ERROR_CODES.CONTENT_NOT_FOUND]: "Content not found.",
+  [CONTENT_ERROR_CODES.UNKNOWN_ERROR]: "An unknown error occurred.",
+  [USER_ERROR_CODES.USER_ALREADY_EXISTS]:
     "A user with this username or email already exists.",
-  [ERROR_CODES.WEAK_PASSWORD]: "Password must be at least 8 characters long.",
-  [ERROR_CODES.INVALID_EMAIL]: "Invalid email address.",
-  [ERROR_CODES.INVALID_TOKEN]: "Invalid token.",
-  [ERROR_CODES.USER_NOT_FOUND]: "User not found.",
-  [ERROR_CODES.USER_ALREADY_VERIFIED]: "User already verified.",
-  [ERROR_CODES.INVALID_VERIFICATION_CODE]: "Invalid verification code.",
+  [USER_ERROR_CODES.WEAK_PASSWORD]: "Password must be at least 8 characters long.",
+  [USER_ERROR_CODES.INVALID_EMAIL]: "Invalid email address.",
+  [USER_ERROR_CODES.INVALID_TOKEN]: "Invalid token.",
+  [USER_ERROR_CODES.USER_NOT_FOUND]: "User not found.",
+  [USER_ERROR_CODES.USER_ALREADY_VERIFIED]: "User already verified.",
+  [USER_ERROR_CODES.INVALID_VERIFICATION_CODE]: "Invalid verification code.",
 };
